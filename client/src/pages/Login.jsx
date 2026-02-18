@@ -37,10 +37,16 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const res = await axios.post("/api/auth/login", { email, password });
+      // ✅ FIX: call Render backend, not Vercel
+      const API = import.meta.env.VITE_API_URL; // e.g. https://mini-revolut.onrender.com
+      if (!API) throw new Error("VITE_API_URL is not defined in Vercel.");
+
+      const res = await axios.post(`${API}/api/auth/login`, { email, password });
+
       localStorage.setItem("token", res.data.token);
       navigate("/dashboard");
     } catch (err) {
+      console.error("Login error:", err);
       setError(err?.response?.data?.message || "Incorrect email or password");
       triggerShake();
     } finally {
@@ -72,13 +78,21 @@ export default function Login() {
         </div>
       )}
 
-      <div style={{ ...s.cardStyle, animation: isShaking ? "shake 0.5s border-box" : "none" }}>
+      <div
+        style={{
+          ...s.cardStyle,
+          animation: isShaking ? "shake 0.5s border-box" : "none",
+        }}
+      >
         <h1 style={s.logoStyle}>
           Mini <span style={{ color: "#2563eb" }}>Revolut</span>
         </h1>
         <h2 style={s.titleStyle}>Welcome back</h2>
 
-        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <form
+          onSubmit={handleLogin}
+          style={{ display: "flex", flexDirection: "column", gap: 18 }}
+        >
           <div>
             <label style={s.labelStyle}>EMAIL ADDRESS</label>
             <input
@@ -87,7 +101,8 @@ export default function Login() {
               onChange={(e) => setEmail(e.target.value)}
               style={{
                 ...s.inputStyle,
-                borderColor: error && !email.includes("@") ? "#ff4d4d" : s.inputStyle.border,
+                borderColor:
+                  error && !email.includes("@") ? "#ff4d4d" : s.inputStyle.border,
               }}
               placeholder="name@company.com"
             />
@@ -101,7 +116,8 @@ export default function Login() {
               onChange={(e) => setPassword(e.target.value)}
               style={{
                 ...s.inputStyle,
-                borderColor: error && password.length < 1 ? "#ff4d4d" : s.inputStyle.border,
+                borderColor:
+                  error && password.length < 1 ? "#ff4d4d" : s.inputStyle.border,
               }}
               placeholder="••••••••"
             />
