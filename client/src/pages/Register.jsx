@@ -13,7 +13,6 @@ export default function Register() {
   const [error, setError] = useState("");
   const [isShaking, setIsShaking] = useState(false);
 
-  // Auto-hide error after 4 seconds
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(""), 4000);
@@ -30,7 +29,6 @@ export default function Register() {
     e.preventDefault();
     setError("");
 
-    // 1. Email Regex
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setError("Please enter a valid email address");
@@ -38,7 +36,6 @@ export default function Register() {
       return;
     }
 
-    
     const passwordRegex =
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
     if (!passwordRegex.test(password)) {
@@ -48,13 +45,30 @@ export default function Register() {
     }
 
     setLoading(true);
+
     try {
-      await axios.post("/api/auth/register", { fullName, email, password });
+      const API = import.meta.env.VITE_API_URL;
+
+      if (!API) {
+        throw new Error("VITE_API_URL is not defined in Vercel.");
+      }
+
+      await axios.post(
+        `${API}/api/auth/register`,
+        { fullName, email, password },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       navigate("/", {
         state: { message: "Registration successful. Please log in." },
       });
+
     } catch (err) {
+      console.error("Register error:", err);
       setError(err?.response?.data?.message || "Registration failed");
       triggerShake();
     } finally {
@@ -78,7 +92,6 @@ export default function Register() {
         }
       `}</style>
 
-      {/* ULTRA BEAUTIFUL FLOATING ERROR */}
       {error && (
         <div style={s.floatingError}>
           <div style={s.errorDot} />
@@ -99,7 +112,9 @@ export default function Register() {
         }}
       >
         <h2 style={s.titleStyle}>Get started</h2>
-        <p style={s.subtitleStyle}>Create an account to manage your money.</p>
+        <p style={s.subtitleStyle}>
+          Create an account to manage your money.
+        </p>
 
         <form
           onSubmit={handleRegister}
