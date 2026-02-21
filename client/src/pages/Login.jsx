@@ -1,30 +1,100 @@
 // Login.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
 import { loginStyles as s } from "../styles/authStyles";
 
 export default function Login() {
   const navigate = useNavigate();
+  const googleBtnRef = useRef(null);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // Keep your existing loading for email/password login
   const [loading, setLoading] = useState(false);
+
+  // Separate loading for Google so you don't disable normal login weirdly
+  const [googleLoading, setGoogleLoading] = useState(false);
+
   const [error, setError] = useState("");
   const [isShaking, setIsShaking] = useState(false);
 
-  // Auto-hide error after 4 seconds
-  useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => setError(""), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
+  const API = import.meta.env.VITE_API_URL;
 
   const triggerShake = () => {
     setIsShaking(true);
     setTimeout(() => setIsShaking(false), 500);
   };
 
+  // --- GOOGLE LOGIN LOGIC ---
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) return;
+
+    let pollId = null;
+    let rendered = false;
+
+    const tryInit = () => {
+      if (rendered) return;
+      if (!window.google?.accounts?.id) return;
+      if (!googleBtnRef.current) return;
+
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (resp) => {
+          try {
+            setGoogleLoading(true);
+            setError("");
+
+            if (!API) throw new Error("VITE_API_URL is not defined.");
+
+            const res = await axios.post(`${API}/api/auth/google`, {
+              credential: resp.credential,
+            });
+
+            localStorage.setItem("token", res.data.token);
+            navigate("/dashboard");
+          } catch (e) {
+            console.error("Google login failed", e);
+            setError(
+              e?.response?.data?.message ||
+                "Google authentication failed. Try again."
+            );
+            triggerShake();
+          } finally {
+            setGoogleLoading(false);
+          }
+        },
+      });
+
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: "outline",
+        size: "large",
+        width: "320",
+        shape: "rectangular",
+      });
+
+      rendered = true;
+      if (pollId) clearInterval(pollId);
+    };
+
+    // Try immediately, then poll briefly until the script is ready
+    tryInit();
+    pollId = setInterval(tryInit, 200);
+
+    return () => {
+      if (pollId) clearInterval(pollId);
+    };
+  }, [navigate, API]);
+
+  // Existing Auto-hide error
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(""), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
@@ -37,9 +107,7 @@ export default function Login() {
 
     setLoading(true);
     try {
-      // ✅ FIX: call Render backend, not Vercel
-      const API = import.meta.env.VITE_API_URL; // e.g. https://mini-revolut.onrender.com
-      if (!API) throw new Error("VITE_API_URL is not defined in Vercel.");
+      if (!API) throw new Error("VITE_API_URL is not defined.");
 
       const res = await axios.post(`${API}/api/auth/login`, { email, password });
 
@@ -70,7 +138,6 @@ export default function Login() {
         }
       `}</style>
 
-      {/* ULTRA BEAUTIFUL FLOATING ERROR */}
       {error && (
         <div style={s.floatingError}>
           <div style={s.errorDot} />
@@ -123,10 +190,36 @@ export default function Login() {
             />
           </div>
 
-          <button type="submit" disabled={loading} style={s.btnStyle}>
+          <button
+            type="submit"
+            disabled={loading || googleLoading}
+            style={s.btnStyle}
+          >
             {loading ? "Verifying..." : "Continue"}
           </button>
         </form>
+
+        {/* --- OR DIVIDER --- */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            margin: "20px 0",
+            color: "#666",
+          }}
+        >
+          <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
+          <span style={{ padding: "0 10px", fontSize: "12px", fontWeight: "600" }}>
+            OR
+          </span>
+          <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
+        </div>
+
+        {/* --- GOOGLE BUTTON TARGET --- */}
+        <div
+          ref={googleBtnRef}
+          style={{ display: "flex", justifyContent: "center" }}
+        />
 
         <p style={s.footerText}>
           New to Mini Revolut?{" "}

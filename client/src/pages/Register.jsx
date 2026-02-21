@@ -1,17 +1,21 @@
-import { useState, useEffect } from "react";
+// Register.jsx
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
 import { registerStyles as s } from "../styles/authStyles";
 
 export default function Register() {
   const navigate = useNavigate();
+  const googleBtnRef = useRef(null);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
   const [isShaking, setIsShaking] = useState(false);
+  const API = import.meta.env.VITE_API_URL;
 
   useEffect(() => {
     if (error) {
@@ -24,6 +28,65 @@ export default function Register() {
     setIsShaking(true);
     setTimeout(() => setIsShaking(false), 500);
   };
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) return;
+
+    let pollId = null;
+    let rendered = false;
+
+    const tryInit = () => {
+      if (rendered) return;
+      if (!window.google?.accounts?.id) return;
+      if (!googleBtnRef.current) return;
+
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (resp) => {
+          try {
+            setGoogleLoading(true);
+            setError("");
+
+            if (!API) throw new Error("VITE_API_URL is not defined.");
+
+            // Same backend endpoint: it will create user if not exists, then return your JWT
+            const res = await axios.post(`${API}/api/auth/google`, {
+              credential: resp.credential,
+            });
+
+            localStorage.setItem("token", res.data.token);
+            navigate("/dashboard");
+          } catch (e) {
+            console.error("Google signup/login failed", e);
+            setError(
+              e?.response?.data?.message ||
+                "Google authentication failed. Try again."
+            );
+            triggerShake();
+          } finally {
+            setGoogleLoading(false);
+          }
+        },
+      });
+
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: "outline",
+        size: "large",
+        width: "320",
+        shape: "rectangular",
+      });
+
+      rendered = true;
+      if (pollId) clearInterval(pollId);
+    };
+
+    tryInit();
+    pollId = setInterval(tryInit, 200);
+
+    return () => {
+      if (pollId) clearInterval(pollId);
+    };
+  }, [navigate, API]);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -47,10 +110,8 @@ export default function Register() {
     setLoading(true);
 
     try {
-      const API = import.meta.env.VITE_API_URL;
-
       if (!API) {
-        throw new Error("VITE_API_URL is not defined in Vercel.");
+        throw new Error("VITE_API_URL is not defined.");
       }
 
       await axios.post(
@@ -66,7 +127,6 @@ export default function Register() {
       navigate("/", {
         state: { message: "Registration successful. Please log in." },
       });
-
     } catch (err) {
       console.error("Register error:", err);
       setError(err?.response?.data?.message || "Registration failed");
@@ -112,9 +172,26 @@ export default function Register() {
         }}
       >
         <h2 style={s.titleStyle}>Get started</h2>
-        <p style={s.subtitleStyle}>
-          Create an account to manage your money.
-        </p>
+        <p style={s.subtitleStyle}>Create an account to manage your money.</p>
+        <div style={{ marginTop: 6, marginBottom: 16, textAlign: "center" }}>
+          <div ref={googleBtnRef} style={{ display: "flex", justifyContent: "center" }} />
+        </div>
+
+        {/* --- OR DIVIDER --- */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            margin: "10px 0 20px",
+            color: "#666",
+          }}
+        >
+          <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
+          <span style={{ padding: "0 10px", fontSize: "12px", fontWeight: "600" }}>
+            OR
+          </span>
+          <div style={{ flex: 1, height: "1px", backgroundColor: "#e5e7eb" }} />
+        </div>
 
         <form
           onSubmit={handleRegister}
@@ -155,7 +232,11 @@ export default function Register() {
             />
           </div>
 
-          <button type="submit" disabled={loading} style={s.btnStyle}>
+          <button
+            type="submit"
+            disabled={loading || googleLoading}
+            style={s.btnStyle}
+          >
             {loading ? "Creating account..." : "Create account"}
           </button>
         </form>
